@@ -128,6 +128,8 @@ export interface AnalystCreate {
   substack_url?: string;
   youtube_channel_id?: string;
   website_url?: string;
+  podcast_rss_url?: string;
+  profile_image_url?: string;
 }
 
 export interface OutcomeUpdate {
