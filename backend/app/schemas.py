@@ -87,6 +87,17 @@ class OutcomeUpdate(BaseModel):
 
 # ── Prediction ────────────────────────────────────────────────────────────────
 
+class StatementMeta(BaseModel):
+    """Lightweight statement — source metadata only, no content. Used in prediction lists."""
+    id: int
+    source_type: SourceType
+    source_url: str
+    source_title: Optional[str]
+    published_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
 class PredictionOut(BaseModel):
     id: int
     statement_id: int
@@ -97,7 +108,7 @@ class PredictionOut(BaseModel):
     confidence_language: Optional[str]
     extracted_at: datetime
     outcome: Optional[OutcomeOut] = None
-    statement: Optional[StatementOut] = None
+    statement: Optional[StatementMeta] = None  # metadata only, no content
 
     model_config = {"from_attributes": True}
 
