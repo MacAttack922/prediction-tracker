@@ -77,3 +77,38 @@ def update_outcome(
     db.commit()
     db.refresh(outcome)
     return outcome
+
+
+@router.post("/prediction/{prediction_id}", response_model=OutcomeOut)
+def rate_prediction_directly(
+    prediction_id: int,
+    body: OutcomeUpdate,
+    db: Session = Depends(get_db),
+):
+    """Rate a prediction directly — creates an outcome if one doesn't exist yet."""
+    prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+
+    outcome = db.query(PredictionOutcome).filter(
+        PredictionOutcome.prediction_id == prediction_id
+    ).first()
+
+    if outcome:
+        outcome.human_rating = body.human_rating
+        outcome.human_notes = body.human_notes
+        outcome.is_finalized = True
+        outcome.reviewed_at = datetime.utcnow()
+    else:
+        outcome = PredictionOutcome(
+            prediction_id=prediction_id,
+            human_rating=body.human_rating,
+            human_notes=body.human_notes,
+            is_finalized=True,
+            reviewed_at=datetime.utcnow(),
+        )
+        db.add(outcome)
+
+    db.commit()
+    db.refresh(outcome)
+    return outcome

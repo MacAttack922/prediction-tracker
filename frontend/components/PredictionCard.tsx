@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import type { Prediction, RatingValue } from "@/lib/api";
+import { useState, useEffect } from "react";
+import type { Prediction, RatingValue, PredictionOutcome } from "@/lib/api";
+import { ratePrediction, finalizeOutcome } from "@/lib/api";
 import RatingBadge from "./RatingBadge";
 
 interface PredictionCardProps {
@@ -22,6 +23,15 @@ const SOURCE_LABELS: Record<string, string> = {
   bloomberg: "Bloomberg",
 };
 
+const RATING_OPTIONS: { value: RatingValue; label: string; color: string }[] = [
+  { value: "true", label: "True", color: "bg-green-100 text-green-800 hover:bg-green-200 border-green-300" },
+  { value: "somewhat_true", label: "Somewhat True", color: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-300" },
+  { value: "mostly_untrue", label: "Mostly Untrue", color: "bg-orange-100 text-orange-800 hover:bg-orange-200 border-orange-300" },
+  { value: "untrue", label: "Untrue", color: "bg-red-100 text-red-800 hover:bg-red-200 border-red-300" },
+  { value: "unresolved", label: "Unresolved", color: "bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300" },
+  { value: "not_a_prediction", label: "Not a Prediction", color: "bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-300" },
+];
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleDateString("en-US", {
@@ -33,12 +43,35 @@ function formatDate(dateStr: string | null): string {
 
 export default function PredictionCard({ prediction }: PredictionCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const outcome = prediction.outcome;
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [outcome, setOutcome] = useState<typeof prediction.outcome>(prediction.outcome);
+  const [rating, setRating] = useState(false);
   const statement = prediction.statement;
 
-  // Determine which rating to show and whether it's pending
+  useEffect(() => {
+    setIsAdmin(sessionStorage.getItem("admin_authed") === "true");
+  }, []);
+
   const displayRating: RatingValue | null = outcome?.human_rating ?? outcome?.llm_rating ?? null;
   const isPending = !!(outcome && !outcome.is_finalized && !outcome.human_rating && outcome.llm_rating);
+  const isFinalized = !!outcome?.is_finalized;
+
+  async function handleRate(value: RatingValue) {
+    setRating(true);
+    try {
+      let updated: typeof outcome;
+      if (outcome?.id) {
+        updated = await finalizeOutcome(outcome.id, { human_rating: value });
+      } else {
+        updated = await ratePrediction(prediction.id, { human_rating: value });
+      }
+      setOutcome(updated);
+    } catch (err) {
+      console.error("Rating failed", err);
+    } finally {
+      setRating(false);
+    }
+  }
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -115,6 +148,37 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Inline rating — admin only, unfinalized predictions */}
+      {isAdmin && !isFinalized && (
+        <div className="mt-3 border-t border-gray-100 pt-3">
+          <p className="mb-1.5 text-xs text-gray-400">Rate this prediction:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {RATING_OPTIONS.map(({ value, label, color }) => (
+              <button
+                key={value}
+                onClick={() => handleRate(value)}
+                disabled={rating}
+                className={`rounded border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${color}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Show edit button for already-finalized predictions when admin */}
+      {isAdmin && isFinalized && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={() => setOutcome((o) => o ? { ...o, is_finalized: false } : o)}
+            className="text-xs text-gray-400 hover:text-gray-600"
+          >
+            Edit rating
+          </button>
         </div>
       )}
     </div>

@@ -262,6 +262,16 @@ export async function finalizeOutcome(
   });
 }
 
+export async function ratePrediction(
+  predictionId: number,
+  data: OutcomeUpdate
+): Promise<PredictionOutcome> {
+  return apiFetch<PredictionOutcome>(`/api/review/prediction/${predictionId}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Bulk Import ───────────────────────────────────────────────────────────────
 
 export interface BulkImportRequest {

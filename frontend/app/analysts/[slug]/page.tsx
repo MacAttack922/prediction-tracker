@@ -187,7 +187,15 @@ export default async function AnalystProfilePage({ params }: Props) {
                   {calledIt.map((p) => (
                     <div key={p.id} className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
                       <span className="mt-0.5 shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-xs font-semibold text-white">True</span>
-                      <p className="text-sm text-gray-800 leading-relaxed">{p.prediction_text}</p>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-800 leading-relaxed">{p.prediction_text}</p>
+                        {p.statement?.source_url && (
+                          <a href={p.statement.source_url} target="_blank" rel="noopener noreferrer"
+                            className="mt-1 inline-block text-xs text-green-700 hover:underline truncate max-w-xs">
+                            {p.statement.source_title || p.statement.source_url}
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -205,7 +213,15 @@ export default async function AnalystProfilePage({ params }: Props) {
                   {gotItWrong.map((p) => (
                     <div key={p.id} className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
                       <span className="mt-0.5 shrink-0 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">Untrue</span>
-                      <p className="text-sm text-gray-800 leading-relaxed">{p.prediction_text}</p>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-800 leading-relaxed">{p.prediction_text}</p>
+                        {p.statement?.source_url && (
+                          <a href={p.statement.source_url} target="_blank" rel="noopener noreferrer"
+                            className="mt-1 inline-block text-xs text-red-700 hover:underline truncate max-w-xs">
+                            {p.statement.source_title || p.statement.source_url}
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
