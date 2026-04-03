@@ -108,8 +108,46 @@ def retry_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
     return upgraded
 
 
+def _list_all_channel_videos(channel_id: str) -> list:
+    """Use yt-dlp to list ALL videos from a channel (no API quota, goes back years)."""
+    import subprocess
+    channel_url = f"https://www.youtube.com/channel/{channel_id}/videos"
+    try:
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "--flat-playlist",
+                "--print", "%(id)s\t%(title)s\t%(upload_date)s",
+                "--no-warnings",
+                "--quiet",
+                channel_url,
+            ],
+            capture_output=True, text=True, timeout=120,
+        )
+        videos = []
+        for line in result.stdout.strip().splitlines():
+            parts = line.split("\t", 2)
+            if len(parts) < 1 or not parts[0]:
+                continue
+            video_id = parts[0].strip()
+            title = parts[1].strip() if len(parts) > 1 else ""
+            date_str = parts[2].strip() if len(parts) > 2 else ""
+            published_at = None
+            if date_str and len(date_str) == 8:
+                try:
+                    published_at = datetime.strptime(date_str, "%Y%m%d")
+                except Exception:
+                    pass
+            videos.append({"id": video_id, "title": title, "published_at": published_at})
+        logger.info(f"yt-dlp found {len(videos)} videos for channel {channel_id}")
+        return videos
+    except Exception as exc:
+        logger.warning(f"yt-dlp channel listing failed for {channel_id}: {exc}")
+        return []
+
+
 def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
-    """Fetch recent YouTube video transcripts for analyst and store as Statements."""
+    """Fetch ALL YouTube video transcripts for analyst (full history) and store as Statements."""
     if not analyst.youtube_channel_id:
         logger.info(f"Analyst {analyst.name} has no YouTube channel ID, skipping.")
         return 0
@@ -126,30 +164,44 @@ def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
         logger.error(f"Could not resolve YouTube channel ID from: {analyst.youtube_channel_id!r}")
         return 0
 
-    feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-    logger.info(f"Fetching YouTube feed for {analyst.name}: {feed_url}")
-
-    try:
-        with httpx.Client(follow_redirects=True, timeout=15, headers=_YT_HEADERS) as client:
-            response = client.get(feed_url)
-            response.raise_for_status()
-        feed = feedparser.parse(response.content)
-    except Exception as exc:
-        logger.error(f"Failed to fetch YouTube feed for {analyst.name}: {exc}")
-        return 0
+    # Try yt-dlp first to get full history; fall back to RSS (last 15 only)
+    all_videos = _list_all_channel_videos(channel_id)
+    if not all_videos:
+        logger.info(f"yt-dlp failed, falling back to RSS feed for {analyst.name}")
+        feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+        try:
+            with httpx.Client(follow_redirects=True, timeout=15, headers=_YT_HEADERS) as client:
+                response = client.get(feed_url)
+                response.raise_for_status()
+            feed = feedparser.parse(response.content)
+        except Exception as exc:
+            logger.error(f"Failed to fetch YouTube feed for {analyst.name}: {exc}")
+            return 0
+        all_videos = []
+        for entry in feed.entries:
+            video_id = entry.get("yt_videoid", "")
+            if not video_id and "v=" in entry.get("link", ""):
+                video_id = entry["link"].split("v=")[-1].split("&")[0]
+            if not video_id:
+                continue
+            published_at = None
+            if entry.get("published_parsed"):
+                try:
+                    published_at = datetime(*entry.published_parsed[:6])
+                except Exception:
+                    pass
+            all_videos.append({
+                "id": video_id,
+                "title": entry.get("title", ""),
+                "published_at": published_at,
+            })
 
     new_count = 0
-    for entry in feed.entries:
-        video_url = entry.get("link", "")
-        video_id = entry.get("yt_videoid", "")
-        if not video_id:
-            # Try to extract from URL
-            if "v=" in video_url:
-                video_id = video_url.split("v=")[-1].split("&")[0]
-        if not video_id:
-            continue
-
-        title = entry.get("title", "")
+    for video_info in all_videos:
+        video_id = video_info["id"]
+        title = video_info["title"]
+        published_at = video_info["published_at"]
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
 
         # Check duplicate
         existing = (
@@ -160,14 +212,7 @@ def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
         if existing:
             continue
 
-        published_at = None
-        if entry.get("published_parsed"):
-            try:
-                published_at = datetime(*entry.published_parsed[:6])
-            except Exception:
-                pass
-
-        # Fetch transcript; try Whisper if API fails; fall back to RSS video description
+        # Try transcript API first (free, fast)
         content = None
         try:
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
@@ -175,8 +220,9 @@ def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
             if joined.strip():
                 content = joined
         except Exception as exc:
-            logger.info(f"Transcript unavailable for {video_id} ({exc}), trying Whisper.")
+            logger.debug(f"Transcript unavailable for {video_id}: {exc}")
 
+        # Try Whisper for videos without transcripts
         if not content:
             try:
                 from app.services.transcriber import transcribe_youtube
@@ -187,43 +233,39 @@ def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
             except Exception as exc:
                 logger.debug(f"Whisper failed for {video_id}: {exc}")
 
+        # Fall back to fetching description via yt-dlp metadata
         if not content:
-            # Extract description from RSS entry (media:description field)
-            raw_desc = ""
-            for tag in entry.get("tags", []):
-                pass  # tags aren't descriptions
-            # feedparser exposes media:description as entry.media_description or via summary
-            media_content = entry.get("media_content", [])
-            if not raw_desc:
-                raw_desc = entry.get("summary", "") or ""
-            # Also try direct attribute feedparser may set
-            if hasattr(entry, "media_description"):
-                raw_desc = entry.media_description
-
-            # Strip boilerplate that follows the actual description
-            boilerplate_markers = [
-                "Join the Patreon", "Where to find more", "Where to find me",
-                "Subscribe to the Newsletter", "Full Newsletter:", "Full analysis available",
-            ]
-            lines = raw_desc.splitlines()
-            clean_lines = []
-            for line in lines:
-                if any(marker in line for marker in boilerplate_markers):
-                    break
-                clean_lines.append(line)
-            raw_desc = "\n".join(clean_lines).strip()
-
-            if len(raw_desc) >= 80:
-                content = f"[Video description] {raw_desc}"
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["yt-dlp", "--skip-download", "--print", "description", "--quiet", "--no-warnings", video_url],
+                    capture_output=True, text=True, timeout=20,
+                )
+                raw_desc = result.stdout.strip()
+                boilerplate_markers = [
+                    "Join the Patreon", "Where to find more", "Where to find me",
+                    "Subscribe to the Newsletter", "Full Newsletter:", "Full analysis available",
+                ]
+                lines = raw_desc.splitlines()
+                clean_lines = []
+                for line in lines:
+                    if any(marker in line for marker in boilerplate_markers):
+                        break
+                    clean_lines.append(line)
+                raw_desc = "\n".join(clean_lines).strip()
+                if len(raw_desc) >= 80:
+                    content = f"[Video description] {raw_desc}"
+            except Exception as exc:
+                logger.debug(f"Description fetch failed for {video_id}: {exc}")
 
         if not content:
-            logger.info(f"No usable content for video {video_id}, skipping.")
+            logger.debug(f"No usable content for video {video_id}, skipping.")
             continue
 
         statement = Statement(
             analyst_id=analyst.id,
             source_type=SourceType.youtube,
-            source_url=video_url or f"https://www.youtube.com/watch?v={video_id}",
+            source_url=video_url,
             source_title=title,
             content=content,
             published_at=published_at,

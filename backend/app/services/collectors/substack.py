@@ -58,83 +58,155 @@ def _fetch_full_post(url: str) -> Optional[str]:
     return text if len(text) > 200 else None
 
 
+def _fetch_all_substack_posts(base_url: str) -> list:
+    """Use Substack's API to paginate through ALL posts (full history)."""
+    api_base = base_url.rstrip("/")
+    posts = []
+    offset = 0
+    limit = 50
+    while True:
+        try:
+            with httpx.Client(follow_redirects=True, timeout=15, headers=_HEADERS) as client:
+                r = client.get(f"{api_base}/api/v1/posts?limit={limit}&offset={offset}")
+            if r.status_code != 200:
+                break
+            batch = r.json()
+        except Exception as exc:
+            logger.debug(f"Substack API pagination failed at offset {offset}: {exc}")
+            break
+        if not batch:
+            break
+        posts.extend(batch)
+        if len(batch) < limit:
+            break  # last page
+        offset += limit
+    logger.info(f"Substack API returned {len(posts)} total posts for {base_url}")
+    return posts
+
+
 def collect_substack_posts(analyst: "Analyst", db: Session) -> int:
-    """Fetch RSS feed from analyst's Substack and store new posts as Statements."""
+    """Fetch ALL Substack posts (full history) and store as Statements."""
     if not analyst.substack_url:
         logger.info(f"Analyst {analyst.name} has no Substack URL, skipping.")
         return 0
 
-    feed_url = analyst.substack_url.rstrip("/") + "/feed"
-    logger.info(f"Fetching Substack feed for {analyst.name}: {feed_url}")
+    base_url = analyst.substack_url.rstrip("/")
 
-    try:
-        feed = feedparser.parse(feed_url)
-    except Exception as exc:
-        logger.error(f"Failed to fetch Substack feed for {analyst.name}: {exc}")
-        return 0
-
-    if feed.bozo and feed.bozo_exception:
-        logger.warning(f"Feed parse warning for {analyst.name}: {feed.bozo_exception}")
+    # Try paginated API first (full history); fall back to RSS (last ~20 posts)
+    api_posts = _fetch_all_substack_posts(base_url)
 
     new_count = 0
-    for entry in feed.entries:
-        url = entry.get("link", "")
-        if not url:
-            continue
 
-        # Check if we already have this URL
-        existing = (
-            db.query(Statement)
-            .filter(Statement.analyst_id == analyst.id, Statement.source_url == url)
-            .first()
-        )
-        if existing:
-            continue
+    if api_posts:
+        for post in api_posts:
+            url = post.get("canonical_url") or post.get("url") or ""
+            if not url:
+                continue
 
-        title = entry.get("title", "")
+            existing = (
+                db.query(Statement)
+                .filter(Statement.analyst_id == analyst.id, Statement.source_url == url)
+                .first()
+            )
+            if existing:
+                continue
 
-        # First try to fetch the full article HTML from the post URL
-        content = _fetch_full_post(url)
+            title = post.get("title", "")
+            content = _fetch_full_post(url)
 
-        # Fall back to RSS content/summary if full fetch failed or returned nothing
-        if not content:
-            raw_html = ""
-            if entry.get("content"):
-                raw_html = entry["content"][0].get("value", "")
-            if not raw_html:
-                raw_html = entry.get("summary", "")
-            if raw_html:
-                soup = BeautifulSoup(raw_html, "html.parser")
-                content = soup.get_text(separator="\n", strip=True)
-            else:
-                content = title
+            if not content:
+                # Use post body_html from API response if available
+                body_html = post.get("body_html", "") or post.get("truncated_body_text", "")
+                if body_html:
+                    soup = BeautifulSoup(body_html, "html.parser")
+                    content = soup.get_text(separator="\n", strip=True)
+                else:
+                    content = title
 
-        published_at = None
-        if entry.get("published_parsed"):
+            published_at = None
+            post_date = post.get("post_date") or post.get("published_at")
+            if post_date:
+                try:
+                    published_at = datetime.fromisoformat(post_date.replace("Z", "+00:00")).replace(tzinfo=None)
+                except Exception:
+                    pass
+
+            statement = Statement(
+                analyst_id=analyst.id,
+                source_type=SourceType.substack,
+                source_url=url,
+                source_title=title,
+                content=content,
+                published_at=published_at,
+                is_processed=False,
+            )
             try:
-                published_at = datetime(*entry.published_parsed[:6])
-            except Exception:
-                pass
-
-        statement = Statement(
-            analyst_id=analyst.id,
-            source_type=SourceType.substack,
-            source_url=url,
-            source_title=title,
-            content=content,
-            published_at=published_at,
-            is_processed=False,
-        )
+                db.add(statement)
+                db.commit()
+                new_count += 1
+            except IntegrityError:
+                db.rollback()
+            except Exception as exc:
+                db.rollback()
+                logger.error(f"Error saving Substack post {url}: {exc}")
+    else:
+        # Fallback: RSS feed (last ~20 posts only)
+        logger.info(f"Falling back to RSS for {analyst.name}")
+        feed_url = base_url + "/feed"
         try:
-            db.add(statement)
-            db.commit()
-            new_count += 1
-        except IntegrityError:
-            db.rollback()
-            logger.debug(f"Duplicate statement skipped: {url}")
+            feed = feedparser.parse(feed_url)
         except Exception as exc:
-            db.rollback()
-            logger.error(f"Error saving statement for {url}: {exc}")
+            logger.error(f"Failed to fetch Substack feed for {analyst.name}: {exc}")
+            return 0
+
+        for entry in feed.entries:
+            url = entry.get("link", "")
+            if not url:
+                continue
+            existing = (
+                db.query(Statement)
+                .filter(Statement.analyst_id == analyst.id, Statement.source_url == url)
+                .first()
+            )
+            if existing:
+                continue
+            title = entry.get("title", "")
+            content = _fetch_full_post(url)
+            if not content:
+                raw_html = ""
+                if entry.get("content"):
+                    raw_html = entry["content"][0].get("value", "")
+                if not raw_html:
+                    raw_html = entry.get("summary", "")
+                if raw_html:
+                    soup = BeautifulSoup(raw_html, "html.parser")
+                    content = soup.get_text(separator="\n", strip=True)
+                else:
+                    content = title
+            published_at = None
+            if entry.get("published_parsed"):
+                try:
+                    published_at = datetime(*entry.published_parsed[:6])
+                except Exception:
+                    pass
+            statement = Statement(
+                analyst_id=analyst.id,
+                source_type=SourceType.substack,
+                source_url=url,
+                source_title=title,
+                content=content,
+                published_at=published_at,
+                is_processed=False,
+            )
+            try:
+                db.add(statement)
+                db.commit()
+                new_count += 1
+            except IntegrityError:
+                db.rollback()
+            except Exception as exc:
+                db.rollback()
+                logger.error(f"Error saving Substack post {url}: {exc}")
 
     logger.info(f"Collected {new_count} new Substack posts for {analyst.name}.")
     return new_count
