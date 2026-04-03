@@ -17,25 +17,31 @@ EXTRACTION_SYSTEM_PROMPT = """You are an expert analyst specializing in identify
 
 Today's date is April 2, 2026.
 
-Your task is to extract all predictions from the provided text — that is, claims about future events, outcomes, or states of the world that the author asserts will happen or is likely to happen.
+Your task is to extract predictions about EXTERNAL, REAL-WORLD events — that is, claims about what will happen in the world: markets, economies, politics, geopolitics, companies, commodities, currencies, interest rates, elections, wars, recessions, etc.
 
 Focus on:
-- Explicit forecasts ("X will happen", "I expect Y")
-- Implicit predictions ("when X happens", "once Y occurs")
-- Conditional predictions ("if X then Y")
+- Explicit forecasts about external events ("inflation will fall", "the Fed will cut rates", "X country will...")
+- Market or economic predictions ("gold will hit $X", "stocks will drop", "the dollar will weaken")
+- Political or geopolitical forecasts ("there will be a recession", "the election will go to...")
+- Conditional predictions about external events ("if X happens, then Y will follow")
 
-Do NOT include:
+Do NOT extract:
+- Personal goals, wishes, or aspirations ("I want to manage $1B one day", "I'd like to...")
+- Career plans or personal ambitions
+- General lifestyle opinions with no external event predicted
 - Historical descriptions of past events
-- General opinions without a predictive element
-- Rhetorical questions
+- Rhetorical questions or abstract philosophical musings
+- Vague sentiment without a specific predicted outcome ("things will get worse")
+
+The prediction must be specific enough to eventually be verified as true or false.
 
 For each prediction, extract:
 - prediction_text: The exact quote or very close paraphrase from the text
-- predicted_event: A brief (1 sentence) description of what is being predicted
-- predicted_timeframe: The timeframe mentioned (e.g., "by end of 2024", "within 6 months", "next year"), or null if none
-- confidence_language: Any hedging or confidence words used (e.g., "I think", "certainly", "likely", "might", "I believe"), or null if none
+- predicted_event: A brief (1 sentence) description of the external event being predicted
+- predicted_timeframe: The timeframe mentioned (e.g., "by end of 2024", "within 6 months"), or null if none
+- confidence_language: Any hedging or confidence words used (e.g., "I think", "certainly", "likely"), or null if none
 
-Respond ONLY with a valid JSON array. If there are no predictions, respond with an empty array [].
+Respond ONLY with a valid JSON array. If there are no qualifying predictions, respond with an empty array [].
 
 Example response:
 [
@@ -51,26 +57,30 @@ NEWS_EXTRACTION_SYSTEM_PROMPT = """You are an expert analyst specializing in ide
 
 Today's date is April 2, 2026.
 
-You will be given a news article and the name of an analyst. Your task is to extract predictions that are directly attributed to that analyst — things they said, wrote, or were quoted as saying. Ignore predictions or claims made by journalists, other sources, or anyone other than the named analyst.
+You will be given a news article and the name of an analyst. Your task is to extract predictions about EXTERNAL, REAL-WORLD events that are directly attributed to that analyst — things they said, wrote, or were quoted as saying. Ignore predictions or claims made by journalists, other sources, or anyone other than the named analyst.
 
 Focus on:
-- Direct quotes from the analyst containing forecasts
-- Paraphrased statements attributed to the analyst with predictive content
-- Explicit forecasts ("X will happen", "I expect Y")
-- Conditional predictions ("if X then Y")
+- Direct quotes from the analyst forecasting external events (markets, economies, politics, geopolitics)
+- Paraphrased statements attributed to the analyst with specific predictive content
+- Explicit forecasts ("X will happen", "I expect Y to occur")
+- Conditional predictions about external events ("if X then Y will follow")
 
-Do NOT include:
+Do NOT extract:
 - Statements made by journalists or other people
+- The analyst's personal goals, wishes, or career aspirations
 - Historical descriptions of past events
-- General opinions without a predictive element
+- Vague sentiment without a specific verifiable outcome
+- General opinions with no external event predicted
+
+The prediction must be specific enough to eventually be verified as true or false.
 
 For each prediction, extract:
 - prediction_text: The exact quote or close paraphrase attributed to the analyst
-- predicted_event: A brief (1 sentence) description of what is being predicted
+- predicted_event: A brief (1 sentence) description of the external event being predicted
 - predicted_timeframe: The timeframe mentioned, or null if none
 - confidence_language: Hedging or confidence words used, or null if none
 
-Respond ONLY with a valid JSON array. If there are no predictions attributed to the analyst, respond with an empty array []."""
+Respond ONLY with a valid JSON array. If there are no qualifying predictions attributed to the analyst, respond with an empty array []."""
 
 
 def extract_predictions(statement: "Statement", anthropic_client: "anthropic.Anthropic", db: Session) -> List[Prediction]:

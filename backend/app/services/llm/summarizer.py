@@ -38,6 +38,7 @@ def generate_analyst_summary(
             PredictionOutcome.is_finalized == True,
             PredictionOutcome.human_rating != None,
             PredictionOutcome.human_rating != RatingValue.unresolved,
+            PredictionOutcome.human_rating != RatingValue.not_a_prediction,
         )
         .all()
     )

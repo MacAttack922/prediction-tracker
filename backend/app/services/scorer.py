@@ -78,10 +78,10 @@ def compute_analyst_score(analyst_id: int, db: Session) -> dict:
                 rating_breakdown.get(outcome.human_rating.value, 0) + 1
             )
 
-    # Compute accuracy score (exclude unresolved)
+    # Compute accuracy score (exclude unresolved and not_a_prediction)
     scoreable_outcomes = [
         o for o in finalized_outcomes
-        if o.human_rating and o.human_rating != RatingValue.unresolved
+        if o.human_rating and o.human_rating not in (RatingValue.unresolved, RatingValue.not_a_prediction)
     ]
 
     if scoreable_outcomes:

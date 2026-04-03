@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from app.database import engine, Base
-from app.routers import analysts, statements, predictions, review
+from app.routers import analysts, statements, predictions, review, importdata
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,9 +33,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+import os
+_frontend_url = os.getenv("FRONTEND_URL", "")
+_allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+if _frontend_url:
+    _allowed_origins.append(_frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,6 +54,7 @@ app.include_router(analysts.router, prefix="/api")
 app.include_router(statements.router, prefix="/api")
 app.include_router(predictions.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
+app.include_router(importdata.router)
 
 
 @app.get("/")

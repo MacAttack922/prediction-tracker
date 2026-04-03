@@ -15,6 +15,7 @@ const RATING_OPTIONS: { value: RatingValue; label: string }[] = [
   { value: "mostly_untrue", label: "Mostly Untrue" },
   { value: "untrue", label: "Untrue" },
   { value: "unresolved", label: "Unresolved" },
+  { value: "not_a_prediction", label: "Not a Prediction" },
 ];
 
 const LLM_RATING_LABELS: Record<string, string> = {
@@ -23,6 +24,7 @@ const LLM_RATING_LABELS: Record<string, string> = {
   mostly_untrue: "Mostly Untrue",
   untrue: "Untrue",
   unresolved: "Unresolved",
+  not_a_prediction: "Not a Prediction",
 };
 
 const LLM_RATING_COLORS: Record<string, string> = {
@@ -31,6 +33,7 @@ const LLM_RATING_COLORS: Record<string, string> = {
   mostly_untrue: "text-orange-700 bg-orange-50 border-orange-200",
   untrue: "text-red-700 bg-red-50 border-red-200",
   unresolved: "text-gray-600 bg-gray-50 border-gray-200",
+  not_a_prediction: "text-purple-700 bg-purple-50 border-purple-200",
 };
 
 interface ItemState {

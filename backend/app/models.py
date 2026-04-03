@@ -24,6 +24,7 @@ class RatingValue(str, enum.Enum):
     somewhat_true = "somewhat_true"
     true = "true"
     unresolved = "unresolved"
+    not_a_prediction = "not_a_prediction"
 
 
 class Analyst(Base):

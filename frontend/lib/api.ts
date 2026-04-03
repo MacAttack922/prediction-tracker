@@ -7,7 +7,8 @@ export type RatingValue =
   | "mostly_untrue"
   | "somewhat_true"
   | "true"
-  | "unresolved";
+  | "unresolved"
+  | "not_a_prediction";
 
 export type SourceType = "substack" | "google_news" | "youtube" | "website" | "podcast" | "youtube_guest" | "podcast_guest";
 
