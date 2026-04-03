@@ -10,7 +10,7 @@ export type RatingValue =
   | "unresolved"
   | "not_a_prediction";
 
-export type SourceType = "substack" | "google_news" | "youtube" | "website" | "podcast" | "youtube_guest" | "podcast_guest" | "twitter" | "cnbc";
+export type SourceType = "substack" | "google_news" | "youtube" | "website" | "podcast" | "youtube_guest" | "podcast_guest" | "twitter" | "cnbc" | "fox_news" | "bloomberg";
 
 export interface AnalystScore {
   total_predictions: number;

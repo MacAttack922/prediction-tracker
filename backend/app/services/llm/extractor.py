@@ -90,7 +90,7 @@ def extract_predictions(statement: "Statement", anthropic_client: "anthropic.Ant
 
     # For third-party content (news, guest videos, guest podcasts), use the quote-aware
     # prompt so we only extract predictions attributed to the named analyst, not the host.
-    THIRD_PARTY_SOURCES = {"google_news", "youtube_guest", "podcast_guest", "cnbc"}
+    THIRD_PARTY_SOURCES = {"google_news", "youtube_guest", "podcast_guest", "cnbc", "fox_news", "bloomberg"}
     is_news = statement.source_type.value in THIRD_PARTY_SOURCES
     today_str = datetime.utcnow().strftime("%B %-d, %Y")
     if is_news:

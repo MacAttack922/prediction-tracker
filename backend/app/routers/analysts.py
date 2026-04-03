@@ -26,6 +26,8 @@ from app.services.collectors.youtube_search import collect_youtube_guest_appeara
 from app.services.collectors.listennotes import collect_podcast_guest_appearances
 from app.services.collectors.twitter import collect_tweets
 from app.services.collectors.cnbc import collect_cnbc_transcripts
+from app.services.collectors.website import collect_website_posts
+from app.services.collectors.media import collect_media_mentions
 from app.services.llm.extractor import extract_predictions
 from app.services.llm.judge import judge_prediction
 from app.services.llm.summarizer import generate_analyst_summary
@@ -155,6 +157,8 @@ def collect_data(analyst_id: int, db: Session = Depends(get_db)):
     podcast_guest_new = collect_podcast_guest_appearances(analyst, db)
     twitter_new = collect_tweets(analyst, db)
     cnbc_new = collect_cnbc_transcripts(analyst, db)
+    website_new = collect_website_posts(analyst, db)
+    media_new = collect_media_mentions(analyst, db)
 
     total_statements = db.query(Statement).filter(Statement.analyst_id == analyst_id).count()
 
@@ -168,7 +172,7 @@ def collect_data(analyst_id: int, db: Session = Depends(get_db)):
         podcast_guest_new=podcast_guest_new,
         twitter_new=twitter_new,
         cnbc_new=cnbc_new,
-        total_new=substack_new + google_new + youtube_new + podcast_new + youtube_guest_new + podcast_guest_new + twitter_new + cnbc_new,
+        total_new=substack_new + google_new + youtube_new + podcast_new + youtube_guest_new + podcast_guest_new + twitter_new + cnbc_new + website_new + media_new,
         total_statements=total_statements,
     )
 

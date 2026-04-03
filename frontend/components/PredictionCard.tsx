@@ -13,6 +13,13 @@ const SOURCE_LABELS: Record<string, string> = {
   google_news: "Google News",
   youtube: "YouTube",
   website: "Website",
+  podcast: "Podcast",
+  youtube_guest: "YouTube (Guest)",
+  podcast_guest: "Podcast (Guest)",
+  twitter: "Twitter/X",
+  cnbc: "CNBC Transcript",
+  fox_news: "Fox News",
+  bloomberg: "Bloomberg",
 };
 
 function formatDate(dateStr: string | null): string {

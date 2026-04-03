@@ -51,76 +51,92 @@ def _fetch_article_text(url: str) -> Optional[str]:
     return text if len(text) > 100 else None
 
 
-def collect_news_mentions(analyst: "Analyst", db: Session) -> int:
-    """Search Google News RSS for mentions of the analyst and store as Statements."""
-    query = quote_plus(analyst.name)
-    feed_url = (
-        f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
-    )
-    logger.info(f"Fetching Google News for {analyst.name}: {feed_url}")
-
+def _fetch_feed_entries(query: str) -> list:
+    """Fetch entries from a single Google News RSS query."""
+    feed_url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
     try:
         feed = feedparser.parse(feed_url)
+        return feed.entries or []
     except Exception as exc:
-        logger.error(f"Failed to fetch Google News for {analyst.name}: {exc}")
-        return 0
+        logger.debug(f"Google News feed failed for query '{query}': {exc}")
+        return []
 
-    if feed.bozo and feed.bozo_exception:
-        logger.warning(f"Feed parse warning for {analyst.name}: {feed.bozo_exception}")
 
-    new_count = 0
-    for entry in feed.entries:
-        url = entry.get("link", "")
-        if not url:
-            continue
+def _save_entry(analyst_id: int, entry: dict, db: Session) -> bool:
+    """Save a single feed entry as a Statement. Returns True if newly saved."""
+    url = entry.get("link", "")
+    if not url:
+        return False
+    existing = db.query(Statement).filter(
+        Statement.analyst_id == analyst_id, Statement.source_url == url
+    ).first()
+    if existing:
+        return False
 
-        existing = (
-            db.query(Statement)
-            .filter(Statement.analyst_id == analyst.id, Statement.source_url == url)
-            .first()
-        )
-        if existing:
-            continue
+    title = entry.get("title", "")
+    full_text = _fetch_article_text(url)
+    if full_text:
+        content = full_text
+    else:
+        raw = entry.get("summary", "") or ""
+        content = BeautifulSoup(raw, "html.parser").get_text(separator=" ", strip=True) if raw else title
 
-        title = entry.get("title", "")
-        # Try to fetch the full article; fall back to RSS summary stripped of HTML
-        full_text = _fetch_article_text(url)
-        if full_text:
-            content = full_text
-        else:
-            raw = entry.get("summary", "") or ""
-            content = BeautifulSoup(raw, "html.parser").get_text(separator=" ", strip=True) if raw else title
+    if len(content.strip()) < 80:
+        return False
 
-        # Skip entries with no real content beyond the title
-        if len(content.strip()) < 80:
-            continue
-
-        published_at = None
-        if entry.get("published_parsed"):
-            try:
-                published_at = datetime(*entry.published_parsed[:6])
-            except Exception:
-                pass
-
-        statement = Statement(
-            analyst_id=analyst.id,
-            source_type=SourceType.google_news,
-            source_url=url,
-            source_title=title,
-            content=content,
-            published_at=published_at,
-            is_processed=False,
-        )
+    published_at = None
+    if entry.get("published_parsed"):
         try:
-            db.add(statement)
-            db.commit()
-            new_count += 1
-        except IntegrityError:
-            db.rollback()
-            logger.debug(f"Duplicate statement skipped: {url}")
-        except Exception as exc:
-            db.rollback()
-            logger.error(f"Error saving Google News statement for {url}: {exc}")
+            published_at = datetime(*entry.published_parsed[:6])
+        except Exception:
+            pass
+
+    statement = Statement(
+        analyst_id=analyst_id,
+        source_type=SourceType.google_news,
+        source_url=url,
+        source_title=title,
+        content=content,
+        published_at=published_at,
+        is_processed=False,
+    )
+    try:
+        db.add(statement)
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        return False
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"Error saving Google News statement for {url}: {exc}")
+        return False
+
+
+def collect_news_mentions(analyst: "Analyst", db: Session) -> int:
+    """Search Google News RSS using multiple queries to maximise coverage."""
+    name = analyst.name
+    # Multiple search angles: general mentions, prediction-specific, interview-specific
+    queries = [
+        name,
+        f'"{name}" prediction',
+        f'"{name}" forecast',
+        f'"{name}" interview',
+        f'"{name}" says',
+    ]
+
+    seen_urls: set = set()
+    new_count = 0
+
+    for query in queries:
+        entries = _fetch_feed_entries(query)
+        for entry in entries:
+            url = entry.get("link", "")
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            if _save_entry(analyst.id, entry, db):
+                new_count += 1
 
     logger.info(f"Collected {new_count} new Google News mentions for {analyst.name}.")
     return new_count

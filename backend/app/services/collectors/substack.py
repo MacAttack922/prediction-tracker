@@ -21,7 +21,7 @@ _HEADERS = {
 
 
 def _fetch_full_post(url: str) -> Optional[str]:
-    """Attempt to fetch the full Substack post HTML and extract readable text."""
+    """Fetch a Substack post HTML and extract as much text as possible, including paywalled previews."""
     try:
         with httpx.Client(follow_redirects=True, timeout=12, headers=_HEADERS) as client:
             r = client.get(url)
@@ -34,12 +34,17 @@ def _fetch_full_post(url: str) -> Optional[str]:
     for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
         tag.decompose()
 
-    # Substack content selectors (most specific first)
+    # Remove the paywall subscription box but keep text above it
+    for el in soup.select("div.paywall, div[class*='paywall'], div.subscribe-widget, div[class*='subscribe']"):
+        el.decompose()
+
+    # Substack content selectors — ordered from most to least specific
     for selector in [
         "div.available-content",
-        "div[class*='body']",
+        "div.body.markup",
         "div[class*='post-content']",
         "div[class*='markup']",
+        "div[class*='body']",
         "article",
         "main",
     ]:
@@ -115,12 +120,21 @@ def collect_substack_posts(analyst: "Analyst", db: Session) -> int:
             content = _fetch_full_post(url)
 
             if not content:
-                # Use post body_html from API response if available
-                body_html = post.get("body_html", "") or post.get("truncated_body_text", "")
+                # Use whatever the API provides — full body, preview, or truncated text
+                body_html = (
+                    post.get("body_html") or
+                    post.get("preview_html") or
+                    post.get("truncated_body_text") or
+                    ""
+                )
                 if body_html:
                     soup = BeautifulSoup(body_html, "html.parser")
                     content = soup.get_text(separator="\n", strip=True)
-                else:
+                # Also append subtitle if present — often contains the key thesis
+                subtitle = post.get("subtitle", "") or ""
+                if subtitle and subtitle not in (content or ""):
+                    content = (subtitle + "\n\n" + (content or "")).strip()
+                if not content:
                     content = title
 
             published_at = None

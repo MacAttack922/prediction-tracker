@@ -18,6 +18,8 @@ class SourceType(str, enum.Enum):
     podcast_guest = "podcast_guest"
     twitter = "twitter"
     cnbc = "cnbc"
+    fox_news = "fox_news"
+    bloomberg = "bloomberg"
 
 
 class RatingValue(str, enum.Enum):

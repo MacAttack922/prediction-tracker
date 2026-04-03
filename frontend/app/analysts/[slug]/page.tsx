@@ -21,6 +21,8 @@ const SOURCE_LABELS: Record<string, string> = {
   podcast_guest: "Podcast (Guest)",
   twitter: "Twitter/X",
   cnbc: "CNBC Transcript",
+  fox_news: "Fox News",
+  bloomberg: "Bloomberg",
 };
 
 export default async function AnalystProfilePage({ params }: Props) {
