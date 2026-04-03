@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-from app.database import engine, Base
-from app.routers import analysts, statements, predictions, review, importdata
+from app.database import engine, Base, run_migrations
+from app.routers import analysts, statements, predictions, review, importdata, bulk_import
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting up — creating database tables...")
     Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
     logger.info("Database tables ready.")
     yield
     logger.info("Shutting down.")
@@ -55,6 +56,7 @@ app.include_router(statements.router, prefix="/api")
 app.include_router(predictions.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
 app.include_router(importdata.router)
+app.include_router(bulk_import.router)
 
 
 @app.get("/")

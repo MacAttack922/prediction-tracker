@@ -87,8 +87,22 @@ def retry_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
                 db.commit()
                 upgraded += 1
                 logger.info(f"Upgraded transcript for video {video_id}")
+                continue
         except Exception as exc:
             logger.debug(f"Transcript still unavailable for {video_id}: {exc}")
+
+        # Try Whisper transcription before giving up
+        try:
+            from app.services.transcriber import transcribe_youtube
+            whisper_content = transcribe_youtube(video_id)
+            if whisper_content and len(whisper_content.strip()) > 50:
+                stmt.content = whisper_content
+                stmt.is_processed = False
+                db.commit()
+                upgraded += 1
+                logger.info(f"Upgraded transcript via Whisper for video {video_id}")
+        except Exception as exc:
+            logger.debug(f"Whisper transcription failed for {video_id}: {exc}")
 
     logger.info(f"Upgraded {upgraded} YouTube transcripts for {analyst.name}.")
     return upgraded
@@ -153,7 +167,7 @@ def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
             except Exception:
                 pass
 
-        # Fetch transcript; fall back to RSS video description on failure
+        # Fetch transcript; try Whisper if API fails; fall back to RSS video description
         content = None
         try:
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
@@ -161,7 +175,17 @@ def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
             if joined.strip():
                 content = joined
         except Exception as exc:
-            logger.info(f"Transcript unavailable for {video_id} ({exc}), trying description fallback.")
+            logger.info(f"Transcript unavailable for {video_id} ({exc}), trying Whisper.")
+
+        if not content:
+            try:
+                from app.services.transcriber import transcribe_youtube
+                whisper_content = transcribe_youtube(video_id)
+                if whisper_content and len(whisper_content.strip()) > 50:
+                    content = whisper_content
+                    logger.info(f"Got Whisper transcript for video {video_id}")
+            except Exception as exc:
+                logger.debug(f"Whisper failed for {video_id}: {exc}")
 
         if not content:
             # Extract description from RSS entry (media:description field)

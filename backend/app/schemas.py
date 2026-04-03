@@ -35,6 +35,7 @@ class AnalystOut(BaseModel):
     youtube_channel_id: Optional[str]
     website_url: Optional[str]
     podcast_rss_url: Optional[str]
+    twitter_handle: Optional[str]
     profile_image_url: Optional[str]
     narrative_summary: Optional[str]
     summary_updated_at: Optional[datetime]
@@ -143,6 +144,8 @@ class CollectResult(BaseModel):
     podcast_new: int
     youtube_guest_new: int
     podcast_guest_new: int
+    twitter_new: int
+    cnbc_new: int
     total_new: int
     total_statements: int
 

@@ -182,6 +182,12 @@ export default function AdminDashboard() {
             Paste Text
           </Link>
           <Link
+            href="/admin/bulk-import"
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Bulk Import
+          </Link>
+          <Link
             href="/admin/analysts/new"
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
           >

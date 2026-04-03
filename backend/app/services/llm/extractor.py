@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 EXTRACTION_SYSTEM_PROMPT = """You are an expert analyst specializing in identifying predictions and forecasts in text.
 
-Today's date is April 2, 2026.
-
 Your task is to extract predictions about EXTERNAL, REAL-WORLD events — that is, claims about what will happen in the world: markets, economies, politics, geopolitics, companies, commodities, currencies, interest rates, elections, wars, recessions, etc.
 
 Focus on:
@@ -55,8 +53,6 @@ Example response:
 
 NEWS_EXTRACTION_SYSTEM_PROMPT = """You are an expert analyst specializing in identifying predictions and forecasts made by specific individuals.
 
-Today's date is April 2, 2026.
-
 You will be given a news article and the name of an analyst. Your task is to extract predictions about EXTERNAL, REAL-WORLD events that are directly attributed to that analyst — things they said, wrote, or were quoted as saying. Ignore predictions or claims made by journalists, other sources, or anyone other than the named analyst.
 
 Focus on:
@@ -94,8 +90,9 @@ def extract_predictions(statement: "Statement", anthropic_client: "anthropic.Ant
 
     # For third-party content (news, guest videos, guest podcasts), use the quote-aware
     # prompt so we only extract predictions attributed to the named analyst, not the host.
-    THIRD_PARTY_SOURCES = {"google_news", "youtube_guest", "podcast_guest"}
+    THIRD_PARTY_SOURCES = {"google_news", "youtube_guest", "podcast_guest", "cnbc"}
     is_news = statement.source_type.value in THIRD_PARTY_SOURCES
+    today_str = datetime.utcnow().strftime("%B %-d, %Y")
     if is_news:
         analyst_name = statement.analyst.name if statement.analyst else "the analyst"
         system_prompt = NEWS_EXTRACTION_SYSTEM_PROMPT
@@ -106,7 +103,9 @@ News article:
 {content}
 ---
 
-Extract only predictions directly attributed to {analyst_name}. Respond ONLY with a valid JSON array."""
+Extract only predictions directly attributed to {analyst_name}. Respond ONLY with a valid JSON array.
+
+Today's date: {today_str}"""
     else:
         system_prompt = EXTRACTION_SYSTEM_PROMPT
         user_message = f"""Please extract all predictions from the following text:
@@ -115,7 +114,9 @@ Extract only predictions directly attributed to {analyst_name}. Respond ONLY wit
 {content}
 ---
 
-Remember to respond ONLY with a valid JSON array."""
+Remember to respond ONLY with a valid JSON array.
+
+Today's date: {today_str}"""
 
     try:
         response = anthropic_client.messages.create(

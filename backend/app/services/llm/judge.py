@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 JUDGE_SYSTEM_PROMPT = """You are an impartial fact-checker tasked with evaluating the accuracy of predictions.
 
-Today's date is April 2, 2026.
-
 Given a prediction and evidence gathered from news sources, rate the prediction's accuracy using one of these ratings:
 - true: The predicted event happened largely as described
 - somewhat_true: The event partially happened, or happened with significant caveats
@@ -31,7 +29,7 @@ Given a prediction and evidence gathered from news sources, rate the prediction'
 CRITICAL RULES — follow these strictly:
 1. DEFAULT TO "unresolved". Only use true/somewhat_true/mostly_untrue/untrue if you have clear, specific evidence from the provided news sources that the event definitively happened or did not happen.
 2. If the news evidence is absent, vague, or does not directly confirm or deny the predicted event, rate as "unresolved".
-3. If the prediction concerns events that could plausibly still lie in the future as of April 2, 2026, rate as "unresolved".
+3. If the prediction concerns events that could plausibly still lie in the future as of today's date (provided in the user message), rate as "unresolved".
 4. Do NOT use your general world knowledge or reasoning to infer an outcome — only rate based on what the provided evidence explicitly confirms.
 5. When in doubt, choose "unresolved".
 
@@ -121,6 +119,7 @@ def judge_prediction(
     # Step 2: Call Claude to judge
     timeframe_note = f"\nPredicted timeframe: {prediction.predicted_timeframe}" if prediction.predicted_timeframe else ""
     examples_block = _build_examples_block(calibration_examples or [])
+    today_str = datetime.utcnow().strftime("%B %-d, %Y")
     user_message = f"""Please evaluate the following prediction:
 
 **Prediction**: "{prediction.prediction_text}"
@@ -131,7 +130,9 @@ def judge_prediction(
 
 {examples_block}
 
-Rate this prediction's accuracy based on the evidence above."""
+Rate this prediction's accuracy based on the evidence above.
+
+Today's date: {today_str}"""
 
     try:
         response = anthropic_client.messages.create(

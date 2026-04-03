@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -24,3 +24,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def run_migrations(eng):
+    """Add new columns that may not exist yet."""
+    with eng.connect() as conn:
+        for sql in [
+            "ALTER TABLE analysts ADD COLUMN twitter_handle VARCHAR(100)",
+        ]:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                pass  # column already exists

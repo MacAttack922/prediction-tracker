@@ -19,6 +19,8 @@ const SOURCE_LABELS: Record<string, string> = {
   podcast: "Podcast",
   youtube_guest: "YouTube (Guest)",
   podcast_guest: "Podcast (Guest)",
+  twitter: "Twitter/X",
+  cnbc: "CNBC Transcript",
 };
 
 export default async function AnalystProfilePage({ params }: Props) {
@@ -39,6 +41,15 @@ export default async function AnalystProfilePage({ params }: Props) {
     if (!bySource[key]) bySource[key] = [];
     bySource[key].push(p);
   }
+
+  // Notable calls: finalized predictions with true or untrue human_rating
+  const calledIt = predictions.filter(
+    (p) => p.outcome?.is_finalized && p.outcome?.human_rating === "true"
+  );
+  const gotItWrong = predictions.filter(
+    (p) => p.outcome?.is_finalized && p.outcome?.human_rating === "untrue"
+  );
+  const hasNotableCalls = calledIt.length > 0 || gotItWrong.length > 0;
 
   // Rating breakdown for the summary bar
   const breakdown = score?.rating_breakdown ?? {};
@@ -156,6 +167,51 @@ export default async function AnalystProfilePage({ params }: Props) {
           </div>
         )}
       </div>
+
+      {/* Notable Calls */}
+      {hasNotableCalls && (
+        <div className="mt-8">
+          <h2 className="mb-4 text-xl font-semibold text-gray-900">Notable Calls</h2>
+          <div className="space-y-6">
+            {calledIt.length > 0 && (
+              <section>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-green-600">
+                  <span className="rounded bg-green-100 px-2 py-0.5">Called It</span>
+                  <span className="text-gray-400 normal-case font-normal tracking-normal">
+                    {calledIt.length} prediction{calledIt.length !== 1 ? "s" : ""}
+                  </span>
+                </h3>
+                <div className="space-y-2">
+                  {calledIt.map((p) => (
+                    <div key={p.id} className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+                      <span className="mt-0.5 shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-xs font-semibold text-white">True</span>
+                      <p className="text-sm text-gray-800 leading-relaxed">{p.prediction_text}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {gotItWrong.length > 0 && (
+              <section>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-red-600">
+                  <span className="rounded bg-red-100 px-2 py-0.5">Got It Wrong</span>
+                  <span className="text-gray-400 normal-case font-normal tracking-normal">
+                    {gotItWrong.length} prediction{gotItWrong.length !== 1 ? "s" : ""}
+                  </span>
+                </h3>
+                <div className="space-y-2">
+                  {gotItWrong.map((p) => (
+                    <div key={p.id} className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+                      <span className="mt-0.5 shrink-0 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">Untrue</span>
+                      <p className="text-sm text-gray-800 leading-relaxed">{p.prediction_text}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Predictions */}
       <div className="mt-8">

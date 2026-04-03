@@ -10,7 +10,7 @@ export type RatingValue =
   | "unresolved"
   | "not_a_prediction";
 
-export type SourceType = "substack" | "google_news" | "youtube" | "website" | "podcast" | "youtube_guest" | "podcast_guest";
+export type SourceType = "substack" | "google_news" | "youtube" | "website" | "podcast" | "youtube_guest" | "podcast_guest" | "twitter" | "cnbc";
 
 export interface AnalystScore {
   total_predictions: number;
@@ -29,6 +29,7 @@ export interface Analyst {
   youtube_channel_id: string | null;
   website_url: string | null;
   podcast_rss_url: string | null;
+  twitter_handle: string | null;
   profile_image_url: string | null;
   narrative_summary: string | null;
   summary_updated_at: string | null;
@@ -108,6 +109,8 @@ export interface CollectResult {
   podcast_new: number;
   youtube_guest_new: number;
   podcast_guest_new: number;
+  twitter_new: number;
+  cnbc_new: number;
   total_new: number;
   total_statements: number;
 }
@@ -188,6 +191,7 @@ export interface AnalystUpdate {
   youtube_channel_id?: string;
   website_url?: string;
   podcast_rss_url?: string;
+  twitter_handle?: string;
   profile_image_url?: string;
 }
 
@@ -253,6 +257,28 @@ export async function finalizeOutcome(
 ): Promise<PredictionOutcome> {
   return apiFetch<PredictionOutcome>(`/api/review/${outcomeId}`, {
     method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ── Bulk Import ───────────────────────────────────────────────────────────────
+
+export interface BulkImportRequest {
+  analyst_id: number;
+  urls: string[];
+  source_type?: string;
+}
+
+export interface BulkImportResult {
+  total: number;
+  imported: number;
+  skipped: number;
+  failed: string[];
+}
+
+export async function bulkImport(data: BulkImportRequest): Promise<BulkImportResult> {
+  return apiFetch<BulkImportResult>("/api/bulk-import", {
+    method: "POST",
     body: JSON.stringify(data),
   });
 }

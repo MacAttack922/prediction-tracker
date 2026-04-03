@@ -1,8 +1,9 @@
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import feedparser
+import httpx
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +14,48 @@ if TYPE_CHECKING:
     from app.models import Analyst
 
 logger = logging.getLogger(__name__)
+
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
+
+def _fetch_full_post(url: str) -> Optional[str]:
+    """Attempt to fetch the full Substack post HTML and extract readable text."""
+    try:
+        with httpx.Client(follow_redirects=True, timeout=12, headers=_HEADERS) as client:
+            r = client.get(url)
+            r.raise_for_status()
+    except Exception as exc:
+        logger.debug(f"Could not fetch full post {url}: {exc}")
+        return None
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
+        tag.decompose()
+
+    # Substack content selectors (most specific first)
+    for selector in [
+        "div.available-content",
+        "div[class*='body']",
+        "div[class*='post-content']",
+        "div[class*='markup']",
+        "article",
+        "main",
+    ]:
+        try:
+            container = soup.select_one(selector)
+        except Exception:
+            continue
+        if container:
+            text = container.get_text(separator="\n", strip=True)
+            if len(text) > 200:
+                return text
+
+    # Fallback: collect all <p> tags from body
+    paragraphs = [p.get_text(separator=" ", strip=True) for p in soup.find_all("p")]
+    text = "\n\n".join(p for p in paragraphs if len(p) > 40)
+    return text if len(text) > 200 else None
 
 
 def collect_substack_posts(analyst: "Analyst", db: Session) -> int:
@@ -49,17 +92,22 @@ def collect_substack_posts(analyst: "Analyst", db: Session) -> int:
             continue
 
         title = entry.get("title", "")
-        # Try to get the full content, fall back to summary; strip HTML tags
-        raw_html = ""
-        if entry.get("content"):
-            raw_html = entry["content"][0].get("value", "")
-        if not raw_html:
-            raw_html = entry.get("summary", "")
-        if raw_html:
-            soup = BeautifulSoup(raw_html, "html.parser")
-            content = soup.get_text(separator="\n", strip=True)
-        else:
-            content = title
+
+        # First try to fetch the full article HTML from the post URL
+        content = _fetch_full_post(url)
+
+        # Fall back to RSS content/summary if full fetch failed or returned nothing
+        if not content:
+            raw_html = ""
+            if entry.get("content"):
+                raw_html = entry["content"][0].get("value", "")
+            if not raw_html:
+                raw_html = entry.get("summary", "")
+            if raw_html:
+                soup = BeautifulSoup(raw_html, "html.parser")
+                content = soup.get_text(separator="\n", strip=True)
+            else:
+                content = title
 
         published_at = None
         if entry.get("published_parsed"):

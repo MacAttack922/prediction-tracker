@@ -16,6 +16,8 @@ class SourceType(str, enum.Enum):
     podcast = "podcast"
     youtube_guest = "youtube_guest"
     podcast_guest = "podcast_guest"
+    twitter = "twitter"
+    cnbc = "cnbc"
 
 
 class RatingValue(str, enum.Enum):
@@ -38,6 +40,7 @@ class Analyst(Base):
     youtube_channel_id = Column(String(255), nullable=True)
     website_url = Column(String(500), nullable=True)
     podcast_rss_url = Column(String(500), nullable=True)
+    twitter_handle = Column(String(100), nullable=True)
     profile_image_url = Column(String(1000), nullable=True)
     narrative_summary = Column(Text, nullable=True)
     summary_updated_at = Column(DateTime, nullable=True)

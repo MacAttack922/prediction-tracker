@@ -24,6 +24,8 @@ from app.services.collectors.youtube import collect_youtube_transcripts, retry_y
 from app.services.collectors.podcast import collect_podcast_episodes
 from app.services.collectors.youtube_search import collect_youtube_guest_appearances
 from app.services.collectors.listennotes import collect_podcast_guest_appearances
+from app.services.collectors.twitter import collect_tweets
+from app.services.collectors.cnbc import collect_cnbc_transcripts
 from app.services.llm.extractor import extract_predictions
 from app.services.llm.judge import judge_prediction
 from app.services.llm.summarizer import generate_analyst_summary
@@ -40,6 +42,7 @@ class AnalystUpdate(BaseModel):
     youtube_channel_id: Optional[str] = None
     website_url: Optional[str] = None
     podcast_rss_url: Optional[str] = None
+    twitter_handle: Optional[str] = None
     profile_image_url: Optional[str] = None
 
 
@@ -150,6 +153,8 @@ def collect_data(analyst_id: int, db: Session = Depends(get_db)):
     podcast_new = collect_podcast_episodes(analyst, db)
     youtube_guest_new = collect_youtube_guest_appearances(analyst, db)
     podcast_guest_new = collect_podcast_guest_appearances(analyst, db)
+    twitter_new = collect_tweets(analyst, db)
+    cnbc_new = collect_cnbc_transcripts(analyst, db)
 
     total_statements = db.query(Statement).filter(Statement.analyst_id == analyst_id).count()
 
@@ -161,7 +166,9 @@ def collect_data(analyst_id: int, db: Session = Depends(get_db)):
         podcast_new=podcast_new,
         youtube_guest_new=youtube_guest_new,
         podcast_guest_new=podcast_guest_new,
-        total_new=substack_new + google_new + youtube_new + podcast_new + youtube_guest_new + podcast_guest_new,
+        twitter_new=twitter_new,
+        cnbc_new=cnbc_new,
+        total_new=substack_new + google_new + youtube_new + podcast_new + youtube_guest_new + podcast_guest_new + twitter_new + cnbc_new,
         total_statements=total_statements,
     )
 

@@ -133,8 +133,27 @@ def collect_podcast_episodes(analyst: "Analyst", db: Session) -> int:
             except Exception:
                 pass
 
-        # Try to get a transcript; fall back to show notes summary
+        # Try to get a transcript; try Whisper via audio enclosure; fall back to show notes
         content = _get_episode_transcript(entry)
+        if not content or len(content.strip()) < 100:
+            # Look for audio enclosure to transcribe with Whisper
+            enclosures = entry.get("enclosures", [])
+            audio_url = None
+            for enc in enclosures:
+                enc_type = enc.get("type", "") or ""
+                if enc_type.startswith("audio"):
+                    audio_url = enc.get("url") or enc.get("href")
+                    break
+            if audio_url:
+                try:
+                    from app.services.transcriber import transcribe_url
+                    whisper_content = transcribe_url(audio_url)
+                    if whisper_content and len(whisper_content.strip()) > 100:
+                        content = whisper_content
+                        logger.info(f"Got Whisper transcript for podcast episode: {title}")
+                except Exception as exc:
+                    logger.debug(f"Whisper transcription failed for {audio_url}: {exc}")
+
         if not content:
             raw = entry.get("summary", "") or entry.get("description", "") or ""
             if raw:

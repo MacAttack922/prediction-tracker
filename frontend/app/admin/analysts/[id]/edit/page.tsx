@@ -17,6 +17,7 @@ export default function EditAnalystPage() {
   const [youtubeChannelId, setYoutubeChannelId] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [podcastRssUrl, setPodcastRssUrl] = useState("");
+  const [twitterHandle, setTwitterHandle] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState("");
 
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,7 @@ export default function EditAnalystPage() {
         setYoutubeChannelId(a.youtube_channel_id ?? "");
         setWebsiteUrl(a.website_url ?? "");
         setPodcastRssUrl(a.podcast_rss_url ?? "");
+        setTwitterHandle(a.twitter_handle ?? "");
         setProfileImageUrl(a.profile_image_url ?? "");
       }
       setLoading(false);
@@ -69,6 +71,7 @@ export default function EditAnalystPage() {
         youtube_channel_id: youtubeChannelId.trim() || undefined,
         website_url: websiteUrl.trim() || undefined,
         podcast_rss_url: podcastRssUrl.trim() || undefined,
+        twitter_handle: twitterHandle.trim() || undefined,
         profile_image_url: profileImageUrl.trim() || undefined,
       });
       setSaved(true);
@@ -159,6 +162,7 @@ export default function EditAnalystPage() {
                 { label: "YouTube Channel or Handle", value: youtubeChannelId, set: setYoutubeChannelId, placeholder: "@handle or channel URL" },
                 { label: "Website URL", value: websiteUrl, set: setWebsiteUrl, placeholder: "https://example.com" },
                 { label: "Podcast RSS URL", value: podcastRssUrl, set: setPodcastRssUrl, placeholder: "https://feeds.example.com/podcast.rss" },
+                { label: "Twitter/X Handle", value: twitterHandle, set: setTwitterHandle, placeholder: "@username" },
               ].map(({ label, value, set, placeholder }) => (
                 <div key={label}>
                   <label className="block text-sm text-gray-600">{label}</label>
