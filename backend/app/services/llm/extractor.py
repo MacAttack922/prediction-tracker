@@ -104,11 +104,11 @@ def extract_predictions(statement: "Statement", anthropic_client: "anthropic.Ant
     """Extract predictions from a statement using Claude and save them to the database."""
     if not statement.content or len(statement.content.strip()) < 50:
         logger.info(f"Statement {statement.id} too short, skipping extraction.")
-        return []
+        return None  # None = skipped
 
     if not _has_prediction_signals(statement.content):
         logger.info(f"Statement {statement.id} has no prediction signals, skipping extraction.")
-        return []
+        return None  # None = skipped; [] = attempted but nothing found
 
     # Truncate very long content to avoid token limits
     content = statement.content[:8000] if len(statement.content) > 8000 else statement.content

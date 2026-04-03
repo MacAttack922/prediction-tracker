@@ -286,7 +286,9 @@ export default function AdminDashboard() {
                       onClick={() => handleProcess(analyst)}
                       successText={
                         a.processResult
-                          ? `${a.processResult.predictions_extracted} extracted`
+                          ? a.processResult.predictions_extracted > 0
+                            ? `${a.processResult.predictions_extracted} extracted (${a.processResult.statements_skipped} skipped)`
+                            : `0 extracted — ${a.processResult.statements_processed} checked, ${a.processResult.statements_skipped} skipped (no signals)`
                           : "Done"
                       }
                     />

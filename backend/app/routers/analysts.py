@@ -192,15 +192,22 @@ def process_statements(analyst_id: int, db: Session = Depends(get_db)):
     )
 
     statements_processed = 0
+    statements_skipped = 0
     predictions_extracted = 0
 
     for statement in unprocessed:
         try:
             preds = extract_predictions(statement, client, db)
-            predictions_extracted += len(preds)
-            statement.is_processed = True
-            db.commit()
-            statements_processed += 1
+            if preds is None:
+                # Pre-filter skipped this statement — still mark processed so we don't retry
+                statements_skipped += 1
+                statement.is_processed = True
+                db.commit()
+            else:
+                predictions_extracted += len(preds)
+                statement.is_processed = True
+                db.commit()
+                statements_processed += 1
         except Exception as exc:
             logger.error(f"Error processing statement {statement.id}: {exc}")
             db.rollback()
@@ -208,6 +215,7 @@ def process_statements(analyst_id: int, db: Session = Depends(get_db)):
     return ProcessResult(
         analyst_id=analyst_id,
         statements_processed=statements_processed,
+        statements_skipped=statements_skipped,
         predictions_extracted=predictions_extracted,
     )
 

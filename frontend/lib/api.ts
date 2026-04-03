@@ -118,6 +118,7 @@ export interface CollectResult {
 export interface ProcessResult {
   analyst_id: number;
   statements_processed: number;
+  statements_skipped: number;
   predictions_extracted: number;
 }
 

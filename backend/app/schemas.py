@@ -153,6 +153,7 @@ class CollectResult(BaseModel):
 class ProcessResult(BaseModel):
     analyst_id: int
     statements_processed: int
+    statements_skipped: int  # skipped by pre-filter (no prediction signals)
     predictions_extracted: int
 
 
