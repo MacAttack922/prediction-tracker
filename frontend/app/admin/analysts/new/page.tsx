@@ -14,6 +14,7 @@ export default function NewAnalystPage() {
   const [youtubeChannelId, setYoutubeChannelId] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [podcastRssUrl, setPodcastRssUrl] = useState("");
+  const [twitterHandle, setTwitterHandle] = useState("");
 
   const [looking, setLooking] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
@@ -54,6 +55,7 @@ export default function NewAnalystPage() {
         youtube_channel_id: youtubeChannelId.trim() || undefined,
         website_url: websiteUrl.trim() || undefined,
         podcast_rss_url: podcastRssUrl.trim() || undefined,
+        twitter_handle: twitterHandle.trim() || undefined,
       });
       router.push("/admin");
     } catch (err) {
@@ -186,6 +188,17 @@ export default function NewAnalystPage() {
                   className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
                 <p className="mt-0.5 text-xs text-gray-400">Transcripts fetched automatically when available.</p>
+              </div>
+              <div>
+                <label htmlFor="twitter_handle" className="block text-sm text-gray-600">Twitter/X Handle</label>
+                <input
+                  id="twitter_handle"
+                  type="text"
+                  value={twitterHandle}
+                  onChange={(e) => setTwitterHandle(e.target.value)}
+                  placeholder="@handle"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
               </div>
             </div>
           </div>

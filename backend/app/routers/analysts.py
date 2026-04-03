@@ -131,6 +131,8 @@ def create_analyst(body: AnalystCreate, db: Session = Depends(get_db)):
         substack_url=body.substack_url,
         youtube_channel_id=body.youtube_channel_id,
         website_url=body.website_url,
+        podcast_rss_url=body.podcast_rss_url,
+        twitter_handle=body.twitter_handle,
     )
     db.add(analyst)
     db.commit()

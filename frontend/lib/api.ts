@@ -134,6 +134,7 @@ export interface AnalystCreate {
   youtube_channel_id?: string;
   website_url?: string;
   podcast_rss_url?: string;
+  twitter_handle?: string;
   profile_image_url?: string;
 }
 

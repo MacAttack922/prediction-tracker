@@ -14,6 +14,7 @@ class AnalystCreate(BaseModel):
     youtube_channel_id: Optional[str] = None
     website_url: Optional[str] = None
     podcast_rss_url: Optional[str] = None
+    twitter_handle: Optional[str] = None
 
 
 class AnalystScore(BaseModel):
