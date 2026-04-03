@@ -39,6 +39,12 @@ const RATING_CONFIG: Record<
     text: "text-gray-600",
     border: "border-gray-300",
   },
+  not_a_prediction: {
+    label: "Not a Prediction",
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    border: "border-purple-300",
+  },
 };
 
 export default function RatingBadge({ rating, isPending = false }: RatingBadgeProps) {
