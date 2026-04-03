@@ -79,10 +79,35 @@ For each prediction, extract:
 Respond ONLY with a valid JSON array. If there are no qualifying predictions attributed to the analyst, respond with an empty array []."""
 
 
+# Keywords that suggest a piece of content contains predictions worth sending to Claude.
+# At least one must appear (case-insensitive) for extraction to proceed.
+_PREDICTION_SIGNALS = [
+    "will ", "won't ", "wont ", "going to", "expect", "forecast", "predict",
+    "projection", "anticipate", "likely", "unlikely", "probably", "probably",
+    "i think", "i believe", "i suspect", "i doubt", "odds are", "chances are",
+    "recession", "inflation", "deflation", "rate hike", "rate cut", "fed will",
+    "market will", "stock", "crash", "rally", "boom", "bust", "bubble",
+    "election", "win", "lose", "war", "invasion", "collapse", "default",
+    "by 20", "in 20", "next year", "next month", "next quarter", "within",
+    "before ", "by end", "by mid", "q1 ", "q2 ", "q3 ", "q4 ",
+    "over the next", "in the coming", "in the next",
+]
+
+
+def _has_prediction_signals(content: str) -> bool:
+    """Quick heuristic check: does this content likely contain predictions?"""
+    lower = content.lower()
+    return any(signal in lower for signal in _PREDICTION_SIGNALS)
+
+
 def extract_predictions(statement: "Statement", anthropic_client: "anthropic.Anthropic", db: Session) -> List[Prediction]:
     """Extract predictions from a statement using Claude and save them to the database."""
     if not statement.content or len(statement.content.strip()) < 50:
         logger.info(f"Statement {statement.id} too short, skipping extraction.")
+        return []
+
+    if not _has_prediction_signals(statement.content):
+        logger.info(f"Statement {statement.id} has no prediction signals, skipping extraction.")
         return []
 
     # Truncate very long content to avoid token limits

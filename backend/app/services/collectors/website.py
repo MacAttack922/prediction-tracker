@@ -202,8 +202,12 @@ def collect_website_posts(analyst: "Analyst", db: Session) -> int:
     # --- Strategy 2: Sitemap crawl ---
     logger.info(f"No RSS found for {analyst.name}, trying sitemap")
     urls = _fetch_sitemap_urls(base_url)
-    # Filter to likely blog/article URLs; skip pagination, tag, category pages
-    skip_patterns = ["/tag/", "/category/", "/author/", "/page/", "?", "#"]
+    # Filter to likely blog/article URLs; skip navigation/meta pages
+    skip_patterns = [
+        "/tag/", "/category/", "/author/", "/page/", "/archive/",
+        "/about", "/contact", "/privacy", "/terms", "/subscribe",
+        "/search", "/feed", "/rss", "?", "#",
+    ]
     article_urls = [u for u in urls if not any(p in u for p in skip_patterns)]
     logger.info(f"Sitemap yielded {len(article_urls)} candidate URLs for {analyst.name}")
 
