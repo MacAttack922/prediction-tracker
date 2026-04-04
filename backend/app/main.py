@@ -34,18 +34,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-import os
-_frontend_url = os.getenv("FRONTEND_URL", "")
-_allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-if _frontend_url:
-    _allowed_origins.append(_frontend_url)
+import re as _re
+
+def _is_allowed_origin(origin: str) -> bool:
+    if origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+        return True
+    if _re.match(r"https://[a-zA-Z0-9-]+\.vercel\.app$", origin):
+        return True
+    return False
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://[a-zA-Z0-9-]+\.vercel\.app",
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
