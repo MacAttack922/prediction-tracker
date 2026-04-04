@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CrankBuster",
+  title: "GuruBuster",
   description: "Rating the accuracy of expert forecasts",
 };
 
@@ -24,25 +24,25 @@ export default function RootLayout({
       <body className="min-h-screen bg-gray-50 text-gray-900">
         <header className="bg-gray-900 text-white shadow-lg">
           <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between">
+            <div className="relative flex items-center justify-center">
               <a href="/" className="flex items-center gap-3 hover:opacity-90">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-600 font-bold text-white text-sm"
-                  style={{ fontFamily: "'Metal Mania', cursive" }}>
-                  CB
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 font-bold text-white text-base"
+                  style={{ fontFamily: "'Metal Mania', cursive", letterSpacing: "0.15em" }}>
+                  GB
                 </div>
                 <div>
                   <span
-                    className="text-xl tracking-wide text-white"
+                    className="text-4xl tracking-wide text-white"
                     style={{ fontFamily: "'Metal Mania', cursive" }}
                   >
-                    CrankBuster
+                    GuruBuster
                   </span>
                   <p className="text-xs text-gray-400 leading-none mt-0.5">
                     Rating the accuracy of expert forecasts
                   </p>
                 </div>
               </a>
-              <nav className="flex items-center gap-4 text-sm">
+              <nav className="absolute right-0 flex items-center gap-4 text-sm">
                 <a href="/" className="text-gray-300 hover:text-white transition-colors">
                   Analysts
                 </a>
@@ -58,7 +58,7 @@ export default function RootLayout({
         </header>
         <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">{children}</main>
         <footer className="mt-16 border-t border-gray-200 bg-white py-6 text-center text-sm text-gray-400">
-          CrankBuster — tracking expert accuracy
+          GuruBuster — tracking expert accuracy
         </footer>
       </body>
     </html>

@@ -21,7 +21,9 @@ class AnalystScore(BaseModel):
     total_predictions: int
     judged_predictions: int
     finalized_predictions: int
-    accuracy_score: Optional[float]  # 0-100
+    accuracy_score: Optional[float]  # 0-100, unweighted
+    weighted_accuracy_score: Optional[float]  # 0-100, lead-time weighted
+    letter_grade: Optional[str]  # A–F based on weighted score
     rating_breakdown: dict[str, int]
 
     model_config = {"from_attributes": True}
@@ -41,6 +43,7 @@ class AnalystOut(BaseModel):
     narrative_summary: Optional[str]
     summary_updated_at: Optional[datetime]
     is_active: bool
+    is_public: bool
     created_at: datetime
     score: Optional[AnalystScore] = None
 
@@ -106,6 +109,7 @@ class PredictionOut(BaseModel):
     prediction_text: str
     predicted_event: Optional[str]
     predicted_timeframe: Optional[str]
+    target_date: Optional[datetime]
     confidence_language: Optional[str]
     extracted_at: datetime
     outcome: Optional[OutcomeOut] = None

@@ -9,6 +9,8 @@ import {
   judgeAnalyst,
   regenerateSummary,
   fetchReviewQueue,
+  fetchPhoto,
+  updateAnalyst,
   type Analyst,
   type CollectResult,
   type ProcessResult,
@@ -22,6 +24,7 @@ interface AnalystActions {
   process: ActionState;
   judge: ActionState;
   summarize: ActionState;
+  photo: ActionState;
   collectResult?: CollectResult;
   processResult?: ProcessResult;
   judgeResult?: JudgeResult;
@@ -39,7 +42,7 @@ export default function AdminDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [a, q] = await Promise.all([fetchAnalysts("no-store"), fetchReviewQueue()]);
+      const [a, q] = await Promise.all([fetchAnalysts("no-store", true), fetchReviewQueue()]);
       setAnalysts(a);
       setQueueCount(q.length);
     } catch (err) {
@@ -132,6 +135,29 @@ export default function AdminDashboard() {
           errorMsg: err instanceof Error ? err.message : "Error",
         },
       }));
+    }
+  }
+
+  async function handleFetchPhoto(analyst: Analyst) {
+    setActionState(analyst.id, "photo", "loading");
+    try {
+      const updated = await fetchPhoto(analyst.id);
+      setAnalysts((prev) => prev.map((a) => (a.id === analyst.id ? { ...a, profile_image_url: updated.profile_image_url } : a)));
+      setActions((prev) => ({ ...prev, [analyst.id]: { ...prev[analyst.id], photo: "success" } }));
+    } catch (err) {
+      setActions((prev) => ({
+        ...prev,
+        [analyst.id]: { ...prev[analyst.id], photo: "error", errorMsg: "No Wikipedia photo found" },
+      }));
+    }
+  }
+
+  async function handleTogglePublic(analyst: Analyst) {
+    try {
+      const updated = await updateAnalyst(analyst.id, { is_public: !analyst.is_public });
+      setAnalysts((prev) => prev.map((a) => (a.id === analyst.id ? { ...a, is_public: updated.is_public } : a)));
+    } catch (err) {
+      console.error("Failed to toggle visibility", err);
     }
   }
 
@@ -255,6 +281,15 @@ export default function AdminDashboard() {
                       >
                         Edit
                       </Link>
+                      <label className="flex cursor-pointer items-center gap-1 text-xs text-gray-500 select-none ml-1">
+                        <input
+                          type="checkbox"
+                          checked={analyst.is_public}
+                          onChange={() => handleTogglePublic(analyst)}
+                          className="h-3.5 w-3.5 accent-blue-600"
+                        />
+                        {analyst.is_public ? "Public" : <span className="text-orange-500 font-medium">Hidden</span>}
+                      </label>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-500">
                       <span>{analyst.score?.total_predictions ?? 0} predictions</span>
@@ -308,6 +343,14 @@ export default function AdminDashboard() {
                       onClick={() => handleSummarize(analyst)}
                       successText="Summary updated"
                     />
+                    {!analyst.profile_image_url && (
+                      <ActionButton
+                        label="Fetch Photo"
+                        state={a.photo ?? "idle"}
+                        onClick={() => handleFetchPhoto(analyst)}
+                        successText="Photo added"
+                      />
+                    )}
                   </div>
                 </div>
 

@@ -21,10 +21,20 @@ function scoreBg(score: number | null): string {
   return "bg-red-50 border-red-200";
 }
 
+function gradeBg(grade: string | null): string {
+  if (!grade) return "";
+  if (grade.startsWith("A")) return "text-green-700";
+  if (grade.startsWith("B")) return "text-blue-700";
+  if (grade.startsWith("C")) return "text-yellow-700";
+  if (grade.startsWith("D")) return "text-orange-700";
+  return "text-red-700";
+}
+
 export default function AnalystCard({ analyst }: AnalystCardProps) {
   const score = analyst.score?.accuracy_score ?? null;
   const total = analyst.score?.total_predictions ?? 0;
   const finalized = analyst.score?.finalized_predictions ?? 0;
+  const grade = analyst.score?.letter_grade ?? null;
 
   return (
     <Link
@@ -76,10 +86,14 @@ export default function AnalystCard({ analyst }: AnalystCardProps) {
         <div
           className={`flex min-w-[80px] flex-col items-center rounded-lg border px-3 py-2 text-center ${scoreBg(score)}`}
         >
-          <span className={`text-2xl font-bold ${scoreColor(score)}`}>
-            {score !== null ? `${score}%` : "—"}
-          </span>
-          <span className="mt-0.5 text-xs text-gray-500">accuracy</span>
+          {grade ? (
+            <span className={`text-3xl font-bold ${gradeBg(grade)}`}>{grade}</span>
+          ) : (
+            <span className="text-3xl font-bold text-gray-300">—</span>
+          )}
+          {score !== null && (
+            <span className={`text-sm font-semibold ${scoreColor(score)}`}>{score}%</span>
+          )}
           <span className="mt-1 text-xs text-gray-400">
             {total} prediction{total !== 1 ? "s" : ""}
           </span>

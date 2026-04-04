@@ -17,6 +17,8 @@ export interface AnalystScore {
   judged_predictions: number;
   finalized_predictions: number;
   accuracy_score: number | null;
+  weighted_accuracy_score: number | null;
+  letter_grade: string | null;
   rating_breakdown: Record<string, number>;
 }
 
@@ -34,6 +36,7 @@ export interface Analyst {
   narrative_summary: string | null;
   summary_updated_at: string | null;
   is_active: boolean;
+  is_public: boolean;
   created_at: string;
   score: AnalystScore | null;
 }
@@ -162,8 +165,9 @@ async function apiFetch<T>(
 
 // ── Analysts ──────────────────────────────────────────────────────────────────
 
-export async function fetchAnalysts(cacheMode?: RequestCache): Promise<Analyst[]> {
-  return apiFetch<Analyst[]>("/api/analysts", { cache: cacheMode ?? "no-store" });
+export async function fetchAnalysts(cacheMode?: RequestCache, admin = false): Promise<Analyst[]> {
+  const url = admin ? "/api/analysts?admin=true" : "/api/analysts";
+  return apiFetch<Analyst[]>(url, { cache: cacheMode ?? "no-store" });
 }
 
 export async function fetchAnalyst(slug: string, cacheMode?: RequestCache): Promise<AnalystDetail> {
@@ -195,6 +199,7 @@ export interface AnalystUpdate {
   podcast_rss_url?: string;
   twitter_handle?: string;
   profile_image_url?: string;
+  is_public?: boolean;
 }
 
 export async function lookupAnalyst(name: string): Promise<AnalystLookup> {

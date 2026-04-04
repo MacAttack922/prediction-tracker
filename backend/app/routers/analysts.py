@@ -46,11 +46,12 @@ class AnalystUpdate(BaseModel):
     podcast_rss_url: Optional[str] = None
     twitter_handle: Optional[str] = None
     profile_image_url: Optional[str] = None
+    is_public: Optional[bool] = None
 
 
-def _fetch_wikipedia_image(name: str) -> Optional[str]:
-    """Try to get a profile photo URL from Wikipedia for a named person."""
-    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(name)}"
+def _fetch_wikipedia_image(title: str) -> Optional[str]:
+    """Fetch a profile photo from Wikipedia given an exact article title."""
+    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(title)}"
     try:
         with httpx.Client(follow_redirects=True, timeout=8) as client:
             r = client.get(url, headers={"User-Agent": "prediction-tracker/1.0"})
@@ -58,7 +59,30 @@ def _fetch_wikipedia_image(name: str) -> Optional[str]:
             data = r.json()
             return (data.get("thumbnail") or data.get("originalimage") or {}).get("source")
     except Exception as exc:
-        logger.debug(f"Wikipedia image fetch failed for {name!r}: {exc}")
+        logger.debug(f"Wikipedia image fetch failed for {title!r}: {exc}")
+    return None
+
+
+def _fetch_photo_via_llm(name: str, anthropic_client: "anthropic.Anthropic") -> Optional[str]:
+    """Use Claude Haiku to resolve the exact Wikipedia article title, then fetch the photo."""
+    try:
+        response = anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=100,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f'What is the exact Wikipedia article title for the public figure named "{name}"? '
+                    f'Reply with only the article title (e.g. "Ray Kurzweil"), or "null" if they do not have a Wikipedia page.'
+                ),
+            }],
+        )
+        wiki_title = response.content[0].text.strip().strip('"\'')
+        if not wiki_title or wiki_title.lower() == "null":
+            return None
+        return _fetch_wikipedia_image(wiki_title)
+    except Exception as exc:
+        logger.debug(f"LLM photo lookup failed for {name!r}: {exc}")
     return None
 
 
@@ -86,8 +110,11 @@ def _make_unique_slug(base_slug: str, db: Session) -> str:
 
 
 @router.get("", response_model=List[AnalystOut])
-def list_analysts(db: Session = Depends(get_db)):
-    analysts = db.query(Analyst).filter(Analyst.is_active == True).order_by(Analyst.name).all()
+def list_analysts(admin: bool = False, db: Session = Depends(get_db)):
+    q = db.query(Analyst).filter(Analyst.is_active == True)
+    if not admin:
+        q = q.filter(Analyst.is_public == True)
+    analysts = q.order_by(Analyst.name).all()
     result = []
     for analyst in analysts:
         score_data = compute_analyst_score(analyst.id, db)
@@ -124,6 +151,11 @@ def create_analyst(body: AnalystCreate, db: Session = Depends(get_db)):
     base_slug = _slugify(body.name)
     slug = _make_unique_slug(base_slug, db)
 
+    try:
+        profile_image_url = _fetch_photo_via_llm(body.name, _get_anthropic_client())
+    except Exception:
+        profile_image_url = None
+
     analyst = Analyst(
         name=body.name,
         slug=slug,
@@ -133,6 +165,7 @@ def create_analyst(body: AnalystCreate, db: Session = Depends(get_db)):
         website_url=body.website_url,
         podcast_rss_url=body.podcast_rss_url,
         twitter_handle=body.twitter_handle,
+        profile_image_url=profile_image_url,
     )
     db.add(analyst)
     db.commit()
@@ -150,17 +183,51 @@ def collect_data(analyst_id: int, db: Session = Depends(get_db)):
     if not analyst:
         raise HTTPException(status_code=404, detail="Analyst not found")
 
-    retry_youtube_transcripts(analyst, db)  # upgrade description stubs if transcripts now available
-    substack_new = collect_substack_posts(analyst, db)
-    google_new = collect_news_mentions(analyst, db)
-    youtube_new = collect_youtube_transcripts(analyst, db)
-    podcast_new = collect_podcast_episodes(analyst, db)
-    youtube_guest_new = collect_youtube_guest_appearances(analyst, db)
-    podcast_guest_new = collect_podcast_guest_appearances(analyst, db)
-    twitter_new = collect_tweets(analyst, db)
-    cnbc_new = collect_cnbc_transcripts(analyst, db)
-    website_new = collect_website_posts(analyst, db)
-    media_new = collect_media_mentions(analyst, db)
+    # Run sequentially first — upgrades existing stubs before new collection starts
+    retry_youtube_transcripts(analyst, db)
+
+    # All collectors are independent I/O-bound tasks — run them in parallel.
+    # Each thread gets its own DB session to avoid SQLAlchemy session conflicts.
+    collectors = [
+        collect_substack_posts,
+        collect_news_mentions,
+        collect_youtube_transcripts,
+        collect_podcast_episodes,
+        collect_youtube_guest_appearances,
+        collect_podcast_guest_appearances,
+        collect_tweets,
+        collect_cnbc_transcripts,
+        collect_website_posts,
+        collect_media_mentions,
+    ]
+
+    def _run_collector(fn):
+        thread_db = SessionLocal()
+        try:
+            thread_analyst = thread_db.query(Analyst).filter(Analyst.id == analyst_id).first()
+            return fn(thread_analyst, thread_db)
+        except Exception as exc:
+            logger.error(f"{fn.__name__} failed: {exc}")
+            return 0
+        finally:
+            thread_db.close()
+
+    results: dict[str, int] = {}
+    with ThreadPoolExecutor(max_workers=len(collectors)) as executor:
+        futures = {executor.submit(_run_collector, fn): fn.__name__ for fn in collectors}
+        for future in as_completed(futures):
+            results[futures[future]] = future.result() or 0
+
+    substack_new       = results.get("collect_substack_posts", 0)
+    google_new         = results.get("collect_news_mentions", 0)
+    youtube_new        = results.get("collect_youtube_transcripts", 0)
+    podcast_new        = results.get("collect_podcast_episodes", 0)
+    youtube_guest_new  = results.get("collect_youtube_guest_appearances", 0)
+    podcast_guest_new  = results.get("collect_podcast_guest_appearances", 0)
+    twitter_new        = results.get("collect_tweets", 0)
+    cnbc_new           = results.get("collect_cnbc_transcripts", 0)
+    website_new        = results.get("collect_website_posts", 0)
+    media_new          = results.get("collect_media_mentions", 0)
 
     total_statements = db.query(Statement).filter(Statement.analyst_id == analyst_id).count()
 
@@ -193,26 +260,42 @@ def process_statements(analyst_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
+    statement_ids = [s.id for s in unprocessed]
+
+    def _process_one(statement_id: int):
+        """Returns (skipped: bool, predictions_count: int)."""
+        thread_db = SessionLocal()
+        try:
+            statement = thread_db.query(Statement).filter(Statement.id == statement_id).first()
+            if not statement:
+                return False, 0
+            preds = extract_predictions(statement, client, thread_db)
+            statement.is_processed = True
+            thread_db.commit()
+            if preds is None:
+                return True, 0   # skipped by pre-filter
+            return False, len(preds)
+        except Exception as exc:
+            logger.error(f"Error processing statement {statement_id}: {exc}")
+            thread_db.rollback()
+            return False, 0
+        finally:
+            thread_db.close()
+
     statements_processed = 0
     statements_skipped = 0
     predictions_extracted = 0
 
-    for statement in unprocessed:
-        try:
-            preds = extract_predictions(statement, client, db)
-            if preds is None:
-                # Pre-filter skipped this statement — still mark processed so we don't retry
+    # max_workers=5 keeps concurrent Anthropic API calls within rate limits
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(_process_one, sid): sid for sid in statement_ids}
+        for future in as_completed(futures):
+            skipped, count = future.result()
+            if skipped:
                 statements_skipped += 1
-                statement.is_processed = True
-                db.commit()
             else:
-                predictions_extracted += len(preds)
-                statement.is_processed = True
-                db.commit()
                 statements_processed += 1
-        except Exception as exc:
-            logger.error(f"Error processing statement {statement.id}: {exc}")
-            db.rollback()
+                predictions_extracted += count
 
     return ProcessResult(
         analyst_id=analyst_id,
@@ -350,7 +433,7 @@ Only include URLs you are confident are correct for this specific person. If you
     except Exception:
         raise HTTPException(status_code=500, detail="Could not parse LLM response")
 
-    profile_image_url = _fetch_wikipedia_image(name)
+    profile_image_url = _fetch_photo_via_llm(name, client)
 
     return {
         "bio": data.get("bio") or None,
@@ -382,9 +465,9 @@ def fetch_photo(analyst_id: int, db: Session = Depends(get_db)):
     analyst = db.query(Analyst).filter(Analyst.id == analyst_id).first()
     if not analyst:
         raise HTTPException(status_code=404, detail="Analyst not found")
-    image_url = _fetch_wikipedia_image(analyst.name)
+    image_url = _fetch_photo_via_llm(analyst.name, _get_anthropic_client())
     if not image_url:
-        raise HTTPException(status_code=404, detail="No Wikipedia photo found for this analyst")
+        raise HTTPException(status_code=404, detail="No photo found for this analyst")
     analyst.profile_image_url = image_url
     db.commit()
     db.refresh(analyst)

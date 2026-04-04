@@ -47,6 +47,7 @@ class Analyst(Base):
     narrative_summary = Column(Text, nullable=True)
     summary_updated_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_public = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     statements = relationship("Statement", back_populates="analyst", cascade="all, delete-orphan")
@@ -83,6 +84,7 @@ class Prediction(Base):
     prediction_text = Column(Text, nullable=False)
     predicted_event = Column(Text, nullable=True)
     predicted_timeframe = Column(String(255), nullable=True)
+    target_date = Column(DateTime, nullable=True)  # structured target date for lead-time weighting
     confidence_language = Column(String(500), nullable=True)
     extracted_at = Column(DateTime, default=datetime.utcnow)
 
