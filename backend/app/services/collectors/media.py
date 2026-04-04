@@ -68,27 +68,31 @@ def _fetch_article_text(url: str) -> Optional[str]:
     return text if len(text) > 150 else None
 
 
-def _collect_for_network(
-    analyst: "Analyst",
-    db: Session,
-    site: str,
-    source_type: SourceType,
-) -> int:
-    """Search Google News RSS for a specific network site and collect matching articles."""
-    query = quote_plus(f'site:{site} "{analyst.name}"')
-    feed_url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+def _time_windows(start_year: int = 2010) -> list:
+    from datetime import date
+    windows = []
+    year = start_year
+    current_year = date.today().year
+    while year <= current_year:
+        end = min(year + 3, current_year + 1)
+        windows.append((f"{year}-01-01", f"{end}-01-01"))
+        year = end
+    return windows
 
+
+def _fetch_and_save(analyst: "Analyst", db: Session, query: str, source_type: SourceType, seen_urls: set) -> int:
+    feed_url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
     try:
         feed = feedparser.parse(feed_url)
-    except Exception as exc:
-        logger.debug(f"Google News feed failed for {site} / {analyst.name}: {exc}")
+    except Exception:
         return 0
 
     new_count = 0
     for entry in feed.entries:
         url = entry.get("link", "")
-        if not url:
+        if not url or url in seen_urls:
             continue
+        seen_urls.add(url)
 
         existing = db.query(Statement).filter(
             Statement.analyst_id == analyst.id,
@@ -129,7 +133,29 @@ def _collect_for_network(
             db.rollback()
         except Exception as exc:
             db.rollback()
-            logger.error(f"Error saving {site} statement for {url}: {exc}")
+            logger.error(f"Error saving statement for {url}: {exc}")
+
+    return new_count
+
+
+def _collect_for_network(
+    analyst: "Analyst",
+    db: Session,
+    site: str,
+    source_type: SourceType,
+) -> int:
+    """Search Google News RSS for a specific network, sweeping time windows back to 2010."""
+    seen_urls: set = set()
+    new_count = 0
+    name = analyst.name
+
+    # Recent (no date filter)
+    new_count += _fetch_and_save(analyst, db, f'site:{site} "{name}"', source_type, seen_urls)
+
+    # Historical windows back to 2010
+    for after, before in _time_windows(start_year=2010):
+        query = f'site:{site} "{name}" after:{after} before:{before}'
+        new_count += _fetch_and_save(analyst, db, query, source_type, seen_urls)
 
     return new_count
 

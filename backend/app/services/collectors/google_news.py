@@ -113,11 +113,25 @@ def _save_entry(analyst_id: int, entry: dict, db: Session) -> bool:
         return False
 
 
+def _time_windows(start_year: int = 2010) -> list:
+    """Generate 3-year date windows from start_year to today."""
+    from datetime import date
+    windows = []
+    year = start_year
+    current_year = date.today().year
+    while year <= current_year:
+        end = min(year + 3, current_year + 1)
+        windows.append((f"{year}-01-01", f"{end}-01-01"))
+        year = end
+    return windows
+
+
 def collect_news_mentions(analyst: "Analyst", db: Session) -> int:
-    """Search Google News RSS using multiple queries to maximise coverage."""
+    """Search Google News RSS across multiple queries AND time windows back to 2010."""
     name = analyst.name
-    # Multiple search angles: general mentions, prediction-specific, interview-specific
-    queries = [
+
+    # Current/recent queries (no date filter — picks up latest)
+    recent_queries = [
         name,
         f'"{name}" prediction',
         f'"{name}" forecast',
@@ -125,10 +139,16 @@ def collect_news_mentions(analyst: "Analyst", db: Session) -> int:
         f'"{name}" says',
     ]
 
+    # Historical queries: sweep time windows back to 2010
+    historical_queries = []
+    for after, before in _time_windows(start_year=2010):
+        historical_queries.append(f'"{name}" after:{after} before:{before}')
+        historical_queries.append(f'"{name}" prediction after:{after} before:{before}')
+
     seen_urls: set = set()
     new_count = 0
 
-    for query in queries:
+    for query in recent_queries + historical_queries:
         entries = _fetch_feed_entries(query)
         for entry in entries:
             url = entry.get("link", "")

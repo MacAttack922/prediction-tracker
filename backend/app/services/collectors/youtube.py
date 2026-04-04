@@ -108,42 +108,107 @@ def retry_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
     return upgraded
 
 
-def _list_all_channel_videos(channel_id: str) -> list:
-    """Use yt-dlp to list ALL videos from a channel (no API quota, goes back years)."""
-    import subprocess
-    channel_url = f"https://www.youtube.com/channel/{channel_id}/videos"
-    try:
-        result = subprocess.run(
-            [
-                "yt-dlp",
-                "--flat-playlist",
-                "--print", "%(id)s\t%(title)s\t%(upload_date)s",
-                "--no-warnings",
-                "--quiet",
-                channel_url,
-            ],
-            capture_output=True, text=True, timeout=120,
-        )
-        videos = []
-        for line in result.stdout.strip().splitlines():
-            parts = line.split("\t", 2)
-            if len(parts) < 1 or not parts[0]:
+def _list_all_channel_videos_api(channel_id: str) -> list:
+    """
+    Use YouTube Data API v3 to list ALL videos ever posted to a channel.
+    Each channel has an 'uploads' playlist with ID = 'UU' + channel_id[2:].
+    Paginates through the full history. Requires YOUTUBE_API_KEY env var.
+    """
+    import os
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        return []
+
+    # The uploads playlist ID is derived from the channel ID
+    uploads_playlist_id = "UU" + channel_id[2:]
+    videos = []
+    page_token = None
+
+    while True:
+        params = {
+            "part": "snippet",
+            "playlistId": uploads_playlist_id,
+            "maxResults": 50,
+            "key": api_key,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        try:
+            with httpx.Client(timeout=15) as client:
+                r = client.get(
+                    "https://www.googleapis.com/youtube/v3/playlistItems",
+                    params=params,
+                )
+            if r.status_code != 200:
+                logger.warning(f"YouTube API error {r.status_code}: {r.text[:200]}")
+                break
+            data = r.json()
+        except Exception as exc:
+            logger.warning(f"YouTube API request failed: {exc}")
+            break
+
+        for item in data.get("items", []):
+            snippet = item.get("snippet", {})
+            video_id = snippet.get("resourceId", {}).get("videoId", "")
+            if not video_id:
                 continue
-            video_id = parts[0].strip()
-            title = parts[1].strip() if len(parts) > 1 else ""
-            date_str = parts[2].strip() if len(parts) > 2 else ""
+            title = snippet.get("title", "")
+            published_str = snippet.get("publishedAt", "")
             published_at = None
-            if date_str and len(date_str) == 8:
+            if published_str:
                 try:
-                    published_at = datetime.strptime(date_str, "%Y%m%d")
+                    published_at = datetime.fromisoformat(published_str.replace("Z", "+00:00")).replace(tzinfo=None)
                 except Exception:
                     pass
             videos.append({"id": video_id, "title": title, "published_at": published_at})
-        logger.info(f"yt-dlp found {len(videos)} videos for channel {channel_id}")
+
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+
+    logger.info(f"YouTube API found {len(videos)} videos for channel {channel_id}")
+    return videos
+
+
+def _list_all_channel_videos(channel_id: str) -> list:
+    """List all channel videos — YouTube Data API first, yt-dlp fallback, then RSS."""
+    # Try YouTube Data API (full history, most reliable)
+    videos = _list_all_channel_videos_api(channel_id)
+    if videos:
         return videos
-    except Exception as exc:
-        logger.warning(f"yt-dlp channel listing failed for {channel_id}: {exc}")
-        return []
+
+    # Try yt-dlp (full history, no API key needed)
+    import subprocess, sys, shutil
+    yt_dlp_cmd = shutil.which("yt-dlp") or shutil.which("yt_dlp")
+    if yt_dlp_cmd:
+        channel_url = f"https://www.youtube.com/channel/{channel_id}/videos"
+        try:
+            result = subprocess.run(
+                [yt_dlp_cmd, "--flat-playlist", "--print", "%(id)s\t%(title)s\t%(upload_date)s",
+                 "--no-warnings", "--quiet", channel_url],
+                capture_output=True, text=True, timeout=180,
+            )
+            videos = []
+            for line in result.stdout.strip().splitlines():
+                parts = line.split("\t", 2)
+                if not parts[0]:
+                    continue
+                published_at = None
+                date_str = parts[2].strip() if len(parts) > 2 else ""
+                if date_str and len(date_str) == 8:
+                    try:
+                        published_at = datetime.strptime(date_str, "%Y%m%d")
+                    except Exception:
+                        pass
+                videos.append({"id": parts[0].strip(), "title": parts[1].strip() if len(parts) > 1 else "", "published_at": published_at})
+            if videos:
+                logger.info(f"yt-dlp found {len(videos)} videos for channel {channel_id}")
+                return videos
+        except Exception as exc:
+            logger.warning(f"yt-dlp failed for {channel_id}: {exc}")
+
+    return []
 
 
 def collect_youtube_transcripts(analyst: "Analyst", db: Session) -> int:
