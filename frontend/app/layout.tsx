@@ -26,8 +26,8 @@ export default function RootLayout({
           <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
             <div className="relative flex items-center justify-center">
               <a href="/" className="flex items-center gap-3 hover:opacity-90">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 font-bold text-white text-base"
-                  style={{ fontFamily: "'Metal Mania', cursive", letterSpacing: "0.15em" }}>
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 font-bold text-white text-xl"
+                  style={{ fontFamily: "'Metal Mania', cursive", letterSpacing: "0.1em" }}>
                   GB
                 </div>
                 <div>
